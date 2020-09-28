@@ -31,15 +31,23 @@ class WODAnalyzer:
     protein = []
     protein_complete = False
 
-    def __init__(self, path=None): # работаем тут
+    def __init__(self, path=None, minimal=20): # работаем тут
         if not path is None:
             f = open(path, 'r')
-
             for line in f:
                 if line[0:6].find('ATOM') != -1:
                     a = Atom(line)
                     if a.resSeq is 'TIP3':
-                        self.protein_complete = True
+                        if not self.protein_complete:
+                            self.protein_complete = True
+                        # перебрать все СА
+                        # найти HOH находящиеся на ближнем расстоянии к конкретному СА
+                        # получить CB, N для этого атома. Передать в функцию вычисления
+                        for protein in self.protein:
+                            if self.distance(protein['CA'], np.array([a.x, a.y, a.z])) < self.minimal:
+                                self.sphere_coordinates_sequence(**self.protein)
+
+
                     if not self.protein_complete:
                         if a.name == 'CA':
                             self.current_sequence['CA'] = np.array([ a.x, a.y, a.z ])
