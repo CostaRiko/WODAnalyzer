@@ -1,9 +1,10 @@
 import numpy as np
 import pandas as pd
 import math
+import sys
 
 class Atom:
-    def __init__(self, pdb_atom_line):
+    def __init__(self, pdb_atom_line, path=""):
         """ Read a PDB atom record and initiate Atom object:
                 fields:
                     id, name, res, resSeq, x, y, z"""
@@ -29,7 +30,24 @@ class WODAnalyzer:
     }
     hemi_pi = math.pi/2
     protein = []
+    water_object = {
+        "CA": None,
+        "H1": None,
+        "H2": None,
+        "O2": None
+    };
     protein_complete = False
+    water_object_is_complete = False
+
+    def wo_check(self):
+        if not self.water_object.CA is None \
+            and not self.water_object.H1 is None \
+            and not self.water_object.H2 is None \
+            and not self.water_object.O2 is None:
+            return True
+        else:
+            return False
+
 
     def __init__(self, path=None, minimal=20): # работаем тут
         if not path is None:
@@ -43,9 +61,16 @@ class WODAnalyzer:
                         # перебрать все СА
                         # найти HOH находящиеся на ближнем расстоянии к конкретному СА
                         # получить CB, N для этого атома. Передать в функцию вычисления
-                        for protein in self.protein:
-                            if self.distance(protein['CA'], np.array([a.x, a.y, a.z])) < self.minimal:
+                        for prot in self.protein:
+                            if self.distance(prot['CA'], np.array([a.x, a.y, a.z])) < self.minimal:
+                                # Требуется тригонометрическая последовательность и метод получения зенита и азимута
+                                # 2х водородов расстояния до кислорода, зенита и азимута кислорода
                                 self.sphere_coordinates_sequence(**self.protein)
+                                H1 = np.array([a.x, a.y, a.z])
+                                H1 = np.array([a.x, a.y, a.z])
+                                if self.wo_check():
+                                    print_water_orientation(**self.water_object)
+
 
 
                     if not self.protein_complete:
@@ -179,8 +204,12 @@ class WODAnalyzer:
             sina = self.sin_from_cos(cosa)
             if N3[2] < 0:
                 sina = -sina
-            xrm = self.x_rotation_matrix(sina, cosa)
-            N4 = np.transpose(N3).dot(xrm)
+            self.rotation_sequence.append({
+                'sina': sina,
+                'cosa': cosa
+            })
+            rmx = self.x_rotation_matrix(sina, cosa)
+            N4 = np.transpose(N3).dot(rmx)
             N4 = np.array([self.check_if_null(N4[0, 0]), self.check_if_null(N4[0, 1]), self.check_if_null(N4[0, 2])])
             if N4[2] != 0:
                 print(N1, N2, N3)
@@ -191,6 +220,51 @@ class WODAnalyzer:
                 print(self.rotation_sequence)
                 raise IOError("Calculation error. Wrong rotational direction. N.Y cooredinate is negative. Program cancel")
         return CB3, N4
+
+    def shift_and_rotate(self, CA, a):
+        a1 = self.shift(CA, a)
+        rmz = self.z_rotation_matrix(sina, cosa)
+        rmy = self.y_rotation_matrix(sina, cosa)
+        rmx = self.x_rotation_matrix(sina, cosa)
+        a2 = np.transpose(a1).dot(rmz)
+        a2 = np.array([a2[0, 0], a2[0, 1], a2[0, 2]])
+        a3 = np.transpose(a2).dot(rmy)
+        a3 = np.array([a3[0, 0], a3[0, 1], a3[0, 2]])
+        a4 = np.transpose(a3).dot(rmx)
+        a4 = np.array([a3[0, 0], a3[0, 1], a3[0, 2]])
+        return a4
+
+
+    def print_water_orientation(self, CA, H1, H2, O2):
+        o_dist = self.distance(CA, O2)
+        H12 = self.shift_and_rotate(CA, H1)
+        H22 = self.shift_and_rotate(CA, H2)
+        O22 = self.shift_and_rotate(CA, O2)
+        H13 = self.shift(O22, H12)
+        H23 = self.shift(O22, H22)
+
+        z1 = np.arccos(H13[2] / np.sqrt(H13[0] ** 2 + H13[1] ** 2 + H13[2] ** 2))
+        z2 = np.arccos(H23[2] / np.sqrt(H23[0] ** 2 + H23[1] ** 2 + H2[2] ** 2))
+
+        if H13[0] == 0:
+            a1 = 0
+        else:
+            a1 = np.arctan(H13[1] / H13[0])
+        if H23[0] == 0:
+            a2 = 0
+        else:
+            a2 = np.arctan(H23[1] / H23[0])
+
+        if path != "":
+            with open(path, "a") as f:
+                f.write("{}\t{}\t{}\t{}\t{}".format(z1, a1, z2, a1, o_dist))
+        else:
+            print("{}\t{}\t{}\t{}\t{}".format(z1, a1, z2, a1, o_dist))
+
+
+
+
+
 
 
 path = "C:\\Users\\softc\\Science\\poly_amino_acids\\polygly\\frames\\frames.pdb"
